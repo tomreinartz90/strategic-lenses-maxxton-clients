@@ -1,0 +1,175 @@
+// URL van uw Google Sheet CSV-publicatie
+const DATA_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTYbNAyBNFk-5RjXCQKATip0J2QzH29I1MQdZVtm_oOcRYJpSrnGlvzHKjkfKivaalU3zqtjuQ0mMun/pub?gid=1539801140&single=true&output=csv';
+
+async function fetchAndPlotData() {
+    try {
+        const response = await fetch(DATA_URL);
+        const data = await response.text();
+
+        // Data splitsen in rijen en kolommen
+        const rows = data.split('\n').map(row => row.split(','));
+
+        // Scheid de data voor klanten en leads
+        const klantenData = [];
+        const leadsData = [];
+        const params = new URLSearchParams(document.location.search);
+        const chartName = params.get("name"); // is the string "Jonathan"
+
+        const dataSets = {
+            growthVsExpansion: {
+                x: 1,
+                y: 2,
+                title: "Growth Ambition vs. Momentum",
+                xLabel: "Low growth ambition ⟷ High growth ambition",
+                yLabel: "Low momentum ⟷ High momentum"
+            },
+            serviceVsDigital: {
+                x: 3,
+                y: 4,
+                title: "Digital Transformation vs. Sustainability",
+                xLabel: "Low Dig. Trans.  ⟷ High Dig. Trans",
+                yLabel: "Low Sust.  ⟷ High Sust."
+            },
+            marketFocusVsExperienceDiff: {
+                x: 5,
+                y: 6,
+                title: "Market Focus vs. Experience Differentiation",
+                xLabel: "Broad Market  ⟷  Niche Market",
+                yLabel: "Low Diff.  ⟷ High Diff."
+            },
+            serviceDepthVsOperationalComplexity: {
+                x: 7,
+                y: 8,
+                title: "Service depth vs. Operational Complexity",
+                xLabel: "Low service ⟷ High service",
+                yLabel: "Low Compl. ⟷  High Compl."
+            },
+        }
+
+        const activeSet = dataSets[chartName] || dataSets.growthVsExpansion;
+
+        // De rijen doorlopen en de data toewijzen
+        rows.forEach(row => {
+            const organisatie = row[0];
+            const xWaarde = parseFloat(row[activeSet.x]);
+            const yWaarde = parseFloat(row[activeSet.y]);
+
+            // Filteren op basis van de organisatie-naam (klanten zijn de top-11, leads de rest)
+            // Merk op dat we de headers overslaan
+            if (organisatie && organisatie.trim() !== 'Organisatie') {
+                if (rows.indexOf(row) < 30) { // Eerste 11 rijen na de header zijn klanten
+                    klantenData.push({x: xWaarde, y: yWaarde, label: organisatie});
+                } else { // De rest zijn leads
+                    leadsData.push({x: xWaarde, y: yWaarde, label: organisatie});
+                }
+            }
+        });
+
+        // Context van de canvas ophalen
+        const ctx = document.getElementById('growthChart').getContext('2d');
+
+        // De grafiek configureren en renderen
+        new Chart(ctx, {
+            type: 'scatter',
+            data: {
+                datasets: [
+                    {
+                        label: 'Customers',
+                        data: klantenData,
+                        backgroundColor: 'rgba(54, 162, 235, 0.6)', // Blauw
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        pointRadius: 6,
+                        pointHoverRadius: 8
+                    },
+                    {
+                        label: 'Leads',
+                        data: leadsData,
+                        backgroundColor: 'rgba(255, 99, 132, 0.6)', // Rood
+                        borderColor: 'rgba(255, 99, 132, 1)',
+                        pointRadius: 6,
+                        pointHoverRadius: 8
+                    }
+                ]
+            },
+            options: {
+                scales: {
+                    x: {
+                        type: 'linear',
+                        position: 'bottom',
+                        title: {
+                            display: true,
+                            text: activeSet.xLabel
+                        },
+                        min: 0,
+                        max: 10,
+                        grid: {
+                            display: false, // Verberg de standaard verticale rasterlijnen
+                            drawBorder: true,
+                            borderColor: '#000'
+                        }
+                    },
+                    y: {
+                        type: 'linear',
+                        position: 'left',
+                        title: {
+                            display: true,
+                            text: activeSet.yLabel
+                        },
+                        min: 0,
+                        max: 10,
+                        grid: {
+                            display: false, // Verberg de standaard horizontale rasterlijnen
+                            drawBorder: true,
+                            borderColor: '#000'
+                        }
+                    }
+                },
+                plugins: {
+                    title: {
+                        display: true,
+                        text: activeSet.title
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function (context) {
+                                const datasetLabel = context.dataset.label || '';
+                                const pointData = context.dataset.data[context.dataIndex];
+                                return `${pointData.label}`;
+                            }
+                        }
+                    },
+
+                    // Voeg de kwadrantlijnen plugin hier toe, binnen hetzelfde object
+                    quadrantLines: {}
+                }
+            },
+            plugins: [{
+                id: 'quadrantLines',
+                beforeDraw(chart, args, options) {
+                    const {ctx, chartArea: {left, right, top, bottom}, scales: {x, y}} = chart;
+                    ctx.save();
+
+                    // Teken de horizontale lijn op y = 5
+                    ctx.strokeStyle = '#888';
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.moveTo(left, y.getPixelForValue(5));
+                    ctx.lineTo(right, y.getPixelForValue(5));
+                    ctx.stroke();
+
+                    // Teken de verticale lijn op x = 5
+                    ctx.beginPath();
+                    ctx.moveTo(x.getPixelForValue(5), top);
+                    ctx.lineTo(x.getPixelForValue(5), bottom);
+                    ctx.stroke();
+
+                    ctx.restore();
+                }
+            }]
+        });
+    } catch (error) {
+        console.error('Fout bij het ophalen of verwerken van de data:', error);
+    }
+}
+
+fetchAndPlotData();
